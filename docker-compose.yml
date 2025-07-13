@@ -1,0 +1,109 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: media-postgres
+    # platform: linux/amd64  # For Apple Silicon compatibility
+    environment:
+      POSTGRES_DB: ${DB_NAME:-media_streaming}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secure_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    networks:
+      - media-network
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    container_name: media-redis
+    # platform: linux/amd64  # For Apple Silicon compatibility
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_password}
+    volumes:
+      - redis_data:/data
+    networks:
+      - media-network
+    restart: always
+
+  media-processor:
+    build:
+      context: .
+      dockerfile: docker/python/Dockerfile
+    container_name: media-processor
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-media_streaming}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-secure_password}
+      - REDIS_HOST=redis
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_password}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-https://localhost:1027}
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./imports:/app/imports
+      - ./assets:/app/assets
+      - ./private:/app/private
+      - ./python:/app/python
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - media-network
+    restart: always
+
+  nextjs-app:
+    build:
+      context: .
+      dockerfile: docker/nextjs/Dockerfile
+    container_name: media-nextjs
+    #ports:
+    #  - "3000:3000"  # Expose Next.js port to local machine
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-media_streaming}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-secure_password}
+      - REDIS_HOST=redis
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_password}
+      - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-https://localhost:1027}
+      - NODE_ENV=production
+    volumes:
+      - ./assets:/app/assets:ro
+      - ./private:/app/private:ro
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - media-network
+    restart: always
+
+  nginx:
+    build:
+      context: .
+      dockerfile: docker/nginx/Dockerfile
+    container_name: media-nginx
+    # platform: linux/amd64  # For Apple Silicon compatibility
+    ports:
+      - "1027:1027"
+    volumes:
+      - ./private/server.pem:/etc/nginx/ssl/server.pem:ro
+      - ./assets:/app/assets:ro
+    depends_on:
+      - nextjs-app
+    networks:
+      - media-network
+    restart: always
+
+networks:
+  media-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:

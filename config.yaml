@@ -1,0 +1,150 @@
+# Application Configuration
+app:
+  name: "Secure Media Streaming Platform"
+  version: "1.0.0"
+  environment: ${APP_ENV:development}
+  debug: ${DEBUG:false}
+  
+# Server Configuration
+server:
+  host: ${SERVER_HOST:0.0.0.0}  # Bind to all interfaces in container
+  port: ${SERVER_PORT:1027}
+  ssl:
+    enabled: ${SSL_ENABLED:true}
+    cert_path: ${SSL_CERT_PATH:/app/private/server.pem}
+    key_path: ${SSL_KEY_PATH:/app/private/server.pem}
+  cors:
+    allowed_origins: 
+      - "https://localhost:1027"
+      - "https://127.0.0.1:1027"
+    allowed_methods: ["GET", "POST", "PUT", "DELETE"]
+    allowed_headers: ["Authorization", "Content-Type"]
+  # Network restrictions
+  allowed_ips:
+    - "127.0.0.1"
+    - "::1"
+    - "172.16.0.0/12"  # Docker internal network
+    - "192.168.1.0/24"  # Local network
+    - "10.8.0.0/24"  # VPN subnet only
+
+# Database Configuration  
+database:
+  postgres:
+    host: ${DB_HOST:localhost}
+    port: ${DB_PORT:5432}
+    database: ${DB_NAME:media_streaming}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:password}
+    ssl_mode: ${DB_SSL_MODE:require}
+    pool:
+      min_connections: 5
+      max_connections: 20
+      connection_timeout: 30s
+
+# Redis Configuration
+redis:
+  host: ${REDIS_HOST:localhost}
+  port: ${REDIS_PORT:6379}
+  password: ${REDIS_PASSWORD:}
+  database: ${REDIS_DB:0}
+  ssl: ${REDIS_SSL:false}
+  session_ttl: 1800 # 30 minutes in seconds
+
+# Storage Configuration
+storage:
+  base_path: ${STORAGE_BASE_PATH:./}
+  directories:
+    imports: "${storage.base_path}/@imports"
+    assets: "${storage.base_path}/@assets"
+    images: "${storage.base_path}/@assets/images"
+    videos: "${storage.base_path}/@assets/videos"
+    private: "${storage.base_path}/private"
+    temp: "${storage.base_path}/temp"
+
+# Media Processing Configuration
+media:
+  processing:
+    watch_interval: 5 # seconds
+    concurrent_workers: ${WORKERS:4}
+    
+  image:
+    output_format: "webp"
+    quality: 85
+    max_width: 3840
+    max_height: 2160
+    thumbnail:
+      width: 300
+      height: 300
+      
+  video:
+    output_format: "hls"
+    segment_duration: 10 # seconds
+    preset: "veryfast"
+    crf: 23
+    audio_bitrate: "128k"
+    resolutions:
+      - { name: "720p", height: 720, bitrate: "3000k" }
+      - { name: "480p", height: 480, bitrate: "1500k" }
+      - { name: "360p", height: 360, bitrate: "800k" }
+    
+  thumbnail:
+    format: "webp"
+    animated: true
+    standard:  # 3-second preview from interesting part
+      width: 320
+      fps: 10
+      duration: 3  # seconds
+      quality: 75
+      compression_level: 6
+      start_position: "10%"  # Start at 10% of video duration
+    preview:  # Scene-based preview
+      width: 480
+      fps: 5
+      max_frames: 20
+      quality: 80
+      compression_level: 6
+      scene_threshold: 0.4  # Scene change detection threshold
+
+# Security Configuration
+security:
+  jwt:
+    access_token_secret: ${JWT_ACCESS_SECRET}
+    refresh_token_secret: ${JWT_REFRESH_SECRET}
+    access_token_expiry: "15m"
+    refresh_token_expiry: "7d"
+    
+  encryption:
+    algorithm: "AES-128-CBC"
+    master_key: ${MASTER_ENCRYPTION_KEY}
+    key_rotation_days: 30
+    
+  session:
+    timeout_minutes: 30
+    max_devices_per_user: 5
+    
+  password:
+    min_length: 8
+    require_uppercase: true
+    require_lowercase: true
+    require_numbers: true
+    require_special: true
+    bcrypt_rounds: 12
+
+# FFmpeg Configuration
+ffmpeg:
+  binary_path: ${FFMPEG_PATH:ffmpeg}
+  threads: ${FFMPEG_THREADS:0} # 0 = auto
+  hwaccel: ${FFMPEG_HWACCEL:none} # none, cuda, vaapi, qsv
+  
+# Logging Configuration
+logging:
+  level: ${LOG_LEVEL:info}
+  format: "json"
+  outputs:
+    - type: "console"
+      level: ${LOG_LEVEL:info}
+    - type: "file"
+      path: "./logs/app.log"
+      max_size_mb: 100
+      max_backups: 5
+      max_age_days: 30
